@@ -9,7 +9,7 @@ More information about NEXT can be found in the paper "NEXT: A New Secondary Ind
 
 ## Data and Queries Example
 
-Examples of data (one millions tuples) and queries are provided in the folder 'Data_and_Queries'
+Examples of data (one millions tuples) and queries can be downloaded from 'https://drive.google.com/drive/folders/1GLobdy70c_DEpHJpVkLpo1nAmIly3tTL?usp=sharing'.
 
 ## Installation & Compile
 
