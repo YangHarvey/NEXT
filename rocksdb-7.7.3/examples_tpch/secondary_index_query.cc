@@ -160,37 +160,72 @@ int main(int argc, char* argv[]) {
     rocksdb::ReadOptions read_options;
     rocksdb::RtreeIteratorContext iterator_context;
 
+    // total 总时间；index_total：从设置查询到拿到第一个 primary key 的时间；
+    // table_total：用 primary key 再查一次原始 KV 的时间。
     std::chrono::nanoseconds totalDuration{0};
+    std::chrono::nanoseconds totalIndexDuration{0};
+    std::chrono::nanoseconds totalTableDuration{0};
+
     for (int i = 0; i < querySize; i++) {
         queryFile >> op >> id >> low[0] >> low[1] >> high[0] >> high[1];
 
         std::cout << "query: " << low[0] << " " << high[0] << " " << low[1] << " " << high[1] << std::endl;
         
         auto start = std::chrono::high_resolution_clock::now();
+
         iterator_context.query_mbr = 
                 serialize_query(low[0], high[0], low[1], high[1]);
         read_options.iterator_context = &iterator_context;
         read_options.is_secondary_index_scan = true;
         read_options.async_io = true;
-        // std::cout << "create newiterator" << std::endl;
-        std::unique_ptr <rocksdb::Iterator> it(db->NewIterator(read_options));
-        // std::cout << "created New iterator" << std::endl;
+
+        std::chrono::nanoseconds table_duration{0};
+
+        std::unique_ptr<rocksdb::Iterator> it(db->NewIterator(read_options));
+
+        auto scan_start = std::chrono::high_resolution_clock::now();
+        it->SeekToFirst();
         int counter = 0;
-        // auto start = std::chrono::high_resolution_clock::now();
-        for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        for (; it->Valid(); it->Next()) {
+            // 1. INDEX LOOKUP: get the primary key
             Val value = deserialize_val(it->value());
-            // std::cout << value.mbr << std::endl;
-            counter ++;
+            (void)value;
+
+            // 2. TABLE LOOKUP: get the value by the primary key
+            std::chrono::nanoseconds table_start = std::chrono::high_resolution_clock::now();
+            std::string primary_value;
+            Status get_status = db->Get(read_options, it->key(), &primary_value);
+            auto table_end = std::chrono::high_resolution_clock::now();
+            table_duration = table_duration + std::chrono::duration_cast<std::chrono::nanoseconds>(table_end - table_start);
+            if (!get_status.ok()) {
+                std::cerr << "Get by primary key failed: " << get_status.ToString() << std::endl;
+            } 
+            counter++;
         }
-        auto end = std::chrono::high_resolution_clock::now(); 
-        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-        totalDuration = totalDuration + duration;
+        auto scan_end = std::chrono::high_resolution_clock::now(); 
+
+        auto scan_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(scan_end - scan_start);
+        auto index_duration = scan_duration - table_duration;
+
+        totalIndexDuration += index_duration;
+        totalTableDuration += table_duration;
+        totalDuration += scan_duration;
 
         std::cout << "Total number of results: " << counter << std::endl; 
-        it.reset();    
+        std::cout << "  Index lookup time (ns): " << index_duration.count() << std::endl;
+        std::cout << "  Table lookup time (ns): " << table_duration.count() << std::endl;
+        std::cout << "  Scan time (ns): " << scan_duration.count() << std::endl;
 
+        it.reset();    
     }
+
     std::cout << "Execution time: " << totalDuration.count() << " nanoseconds" << std::endl;
+    std::cout << "Average time per query: " << totalDuration.count() / querySize << " nanoseconds" << std::endl;
+    std::cout << "Average index lookup time per query: " << totalIndexDuration.count() / querySize << " nanoseconds" << std::endl;
+    std::cout << "Average table lookup time per query: " << totalTableDuration.count() / querySize << " nanoseconds" << std::endl;
+    std::cout << "Average scan time per query: " << totalScanDuration.count() / querySize << " nanoseconds" << std::endl;
+    std::cout << "Average time per query: " << totalDuration.count() / querySize / 1e6 << " milliseconds" << std::endl;
+    std::cout << "Average time per query: " << totalDuration.count() / querySize / 1e9 << " seconds" << std::endl;
 
     db->Close();    
 

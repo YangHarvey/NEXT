@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <unistd.h>
 #include <sstream>
 #include <vector>
@@ -195,6 +196,61 @@ public:
     }
 };
 
+// 格式化时间显示（秒转换为小时:分钟:秒）
+std::string format_time(double seconds) {
+    int hours = static_cast<int>(seconds) / 3600;
+    int minutes = (static_cast<int>(seconds) % 3600) / 60;
+    int secs = static_cast<int>(seconds) % 60;
+    std::ostringstream oss;
+    if (hours > 0) {
+        oss << hours << "h " << minutes << "m " << secs << "s";
+    } else if (minutes > 0) {
+        oss << minutes << "m " << secs << "s";
+    } else {
+        oss << secs << "s";
+    }
+    return oss.str();
+}
+
+// 显示进度条
+void show_progress(int current, int total, 
+                   std::chrono::high_resolution_clock::time_point start_time,
+                   std::chrono::nanoseconds total_duration) {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+    double elapsed_seconds = elapsed / 1000.0;
+    
+    double progress = (current * 100.0) / total;
+    int bar_width = 50;
+    int pos = static_cast<int>(bar_width * progress / 100.0);
+    
+    // 计算速度（条/秒）
+    double speed = current > 0 ? current / elapsed_seconds : 0;
+    
+    // 计算预计剩余时间
+    double remaining_seconds = 0;
+    if (current > 0 && current < total) {
+        remaining_seconds = (elapsed_seconds / current) * (total - current);
+    }
+    
+    std::cout << "\r[";
+    for (int i = 0; i < bar_width; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << std::fixed << std::setprecision(1) << progress << "% "
+              << "(" << current << "/" << total << ") "
+              << "速度: " << std::setprecision(0) << speed << " 条/s "
+              << "已用: " << format_time(elapsed_seconds);
+    
+    if (remaining_seconds > 0) {
+        std::cout << " 预计剩余: " << format_time(remaining_seconds);
+    }
+    
+    std::cout << std::flush;
+}
+
 int main(int argc, char* argv[]) {
 
     std::string kDBPath = argv[1];
@@ -252,6 +308,10 @@ int main(int argc, char* argv[]) {
         std::cout << "start writing data" << std::endl;
         // auto totalDuration = std::chrono::duration<long long, std::milli>(0);
         std::chrono::nanoseconds totalDuration{0};
+        
+        // 记录开始时间用于进度条
+        auto overall_start = std::chrono::high_resolution_clock::now();
+        const int update_interval = std::max(1, dataSize / 100); // 每1%更新一次，至少每1条更新
 
         std::string line;
         int lineCount = 0;
@@ -272,13 +332,25 @@ int main(int argc, char* argv[]) {
             auto end = std::chrono::high_resolution_clock::now(); 
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
             totalDuration = totalDuration + duration;
+            
+            // 更新进度条（每update_interval条或最后一条）
+            if (lineCount % update_interval == 0 || lineCount == dataSize) {
+                show_progress(lineCount, dataSize, overall_start, totalDuration);
+            }
         }
+        
+        // 完成时换行
+        std::cout << std::endl;
         
         std::cout << "Status: " << s.ToString() << std::endl;
         assert(s.ok());
 
         std::cout << "end writing data" << std::endl;
-        std::cout << "Execution time: " << totalDuration.count() << " nanoseconds" << std::endl;
+        auto overall_end = std::chrono::high_resolution_clock::now();
+        auto overall_duration = std::chrono::duration_cast<std::chrono::milliseconds>(overall_end - overall_start);
+        std::cout << "Total execution time: " << format_time(overall_duration.count() / 1000.0) 
+                  << " (" << overall_duration.count() << " ms)" << std::endl;
+        std::cout << "Total write time: " << totalDuration.count() << " nanoseconds" << std::endl;
 
         // sleep to complete the background compactions 
         sleep(480);

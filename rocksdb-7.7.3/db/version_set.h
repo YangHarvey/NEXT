@@ -1508,7 +1508,7 @@ class VersionSet {
   // (SecIndexType) Manually Changed is needed here
   typedef RTree<GlobalSecIndexValue, double, 1, double> GlobalSecRtree;
   GlobalSecRtree global_rtree_;
-  const char* global_rtree_loc_ = "<<Global Index Component Directory>>";
+  const char* global_rtree_loc_ = "./global_rtree";
 
  protected:
   using VersionBuilderMap =
