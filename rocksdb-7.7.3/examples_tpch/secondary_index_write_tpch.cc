@@ -69,7 +69,7 @@ Key deserialize_key(Slice key_slice) {
     return key;
 }
 
-void serialize_item(int lid, const vector<string> &rows, std::string *key, std::string *secondary_key, std::string *value) {
+void serialize_item(int lid, const vector<string> &rows, std::string *key, std::string *secondary_key, std::string *value, int value_size = 314) {
     // Encode key
     key->append(reinterpret_cast<const char*>(&lid), sizeof(int));
 
@@ -128,9 +128,26 @@ void serialize_item(int lid, const vector<string> &rows, std::string *key, std::
     value->append(reinterpret_cast<const char*>(&commitdate), sizeof(double));
 
         // shipinstruct, shipmode, comment
-    value->append(fill_value(rows[l_shipinstruct], 64));
-    value->append(fill_value(rows[l_shipmode], 64));
-    value->append(fill_value(rows[l_comment], 128));
+    if(value_size == 64) {
+        value->append(fill_value(rows[l_shipinstruct], 2));
+        value->append(fill_value(rows[l_shipmode], 2));
+        value->append(fill_value(rows[l_comment], 2));
+    } else if(value_size == 256) {
+        value->append(fill_value(rows[l_shipinstruct], 66));
+        value->append(fill_value(rows[l_shipmode], 66));
+        value->append(fill_value(rows[l_comment], 66));
+    } else if(value_size == 1024) {
+        value->append(fill_value(rows[l_shipinstruct], 322));
+        value->append(fill_value(rows[l_shipmode], 322));
+        value->append(fill_value(rows[l_comment], 322));
+    } else if(value_size == 314) {
+        value->append(fill_value(rows[l_shipinstruct], 64));
+        value->append(fill_value(rows[l_shipmode], 64));
+        value->append(fill_value(rows[l_comment], 128));
+    } else {
+        std::cout << "Invalid value size: " << value_size << std::endl;
+        exit(1);
+    }
 }
 
 
@@ -258,6 +275,12 @@ int main(int argc, char* argv[]) {
     int dataSize = int(atoi(argv[2]));
     std::ifstream dataFile(argv[3]);
     std::cout << "data size: " << dataSize << std::endl;
+    int value_size = int(atoi(argv[4]));
+    if(value_size != 64 && value_size != 314 && value_size != 256 && value_size != 1024) {
+        std::cout << "Invalid value size: " << value_size << std::endl;
+        exit(1);
+    }
+    std::cout << "value size: " << value_size << std::endl;
 
     DB* db;
     Options options;

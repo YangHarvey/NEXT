@@ -192,17 +192,30 @@ int main(int argc, char* argv[]) {
             (void)value;
 
             // 2. TABLE LOOKUP: get the value by the primary key
-            std::chrono::nanoseconds table_start = std::chrono::high_resolution_clock::now();
+            // 使用普通的 ReadOptions，不使用 secondary index scan，避免使用 rtree
+            rocksdb::ReadOptions table_read_options;
+            table_read_options.is_secondary_index_scan = false;
+            auto table_start = std::chrono::high_resolution_clock::now();
             std::string primary_value;
-            Status get_status = db->Get(read_options, it->key(), &primary_value);
+            Status get_status = db->Get(table_read_options, it->key(), &primary_value);
             auto table_end = std::chrono::high_resolution_clock::now();
-            table_duration = table_duration + std::chrono::duration_cast<std::chrono::nanoseconds>(table_end - table_start);
+            // 第一次循环不统计时间，跳过预热阶段
+            if (i > 0) {
+                table_duration = table_duration + std::chrono::duration_cast<std::chrono::nanoseconds>(table_end - table_start);
+            }
             if (!get_status.ok()) {
                 std::cerr << "Get by primary key failed: " << get_status.ToString() << std::endl;
             } 
             counter++;
         }
         auto scan_end = std::chrono::high_resolution_clock::now(); 
+
+        // 第一次循环不统计时间，跳过预热阶段
+        if (i == 0) {
+            std::cout << "First query (warmup) - Total number of results: " << counter << std::endl;
+            it.reset();
+            continue;
+        }
 
         auto scan_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(scan_end - scan_start);
         auto index_duration = scan_duration - table_duration;
@@ -219,13 +232,22 @@ int main(int argc, char* argv[]) {
         it.reset();    
     }
 
-    std::cout << "Execution time: " << totalDuration.count() << " nanoseconds" << std::endl;
-    std::cout << "Average time per query: " << totalDuration.count() / querySize << " nanoseconds" << std::endl;
-    std::cout << "Average index lookup time per query: " << totalIndexDuration.count() / querySize << " nanoseconds" << std::endl;
-    std::cout << "Average table lookup time per query: " << totalTableDuration.count() / querySize << " nanoseconds" << std::endl;
-    std::cout << "Average scan time per query: " << totalScanDuration.count() / querySize << " nanoseconds" << std::endl;
-    std::cout << "Average time per query: " << totalDuration.count() / querySize / 1e6 << " milliseconds" << std::endl;
-    std::cout << "Average time per query: " << totalDuration.count() / querySize / 1e9 << " seconds" << std::endl;
+    // 计算实际统计的查询次数（排除第一次预热）
+    int actualQueryCount = querySize > 1 ? querySize - 1 : 1;
+    
+    if (querySize == 1) {
+        std::cout << "Warning: Only one query executed (used as warmup). No statistics available." << std::endl;
+    } else {
+        std::cout << "Statistics (excluding first warmup query):" << std::endl;
+        std::cout << "Total queries counted: " << actualQueryCount << std::endl;
+        std::cout << "Execution time: " << totalDuration.count() << " nanoseconds" << std::endl;
+        std::cout << "Average time per query: " << totalDuration.count() / actualQueryCount << " nanoseconds" << std::endl;
+        std::cout << "Average index lookup time per query: " << totalIndexDuration.count() / actualQueryCount << " nanoseconds" << std::endl;
+        std::cout << "Average table lookup time per query: " << totalTableDuration.count() / actualQueryCount << " nanoseconds" << std::endl;
+        std::cout << "Average scan time per query: " << totalDuration.count() / actualQueryCount << " nanoseconds" << std::endl;
+        std::cout << "Average time per query: " << totalDuration.count() / actualQueryCount / 1e6 << " milliseconds" << std::endl;
+        std::cout << "Average time per query: " << totalDuration.count() / actualQueryCount / 1e9 << " seconds" << std::endl;
+    }
 
     db->Close();    
 
