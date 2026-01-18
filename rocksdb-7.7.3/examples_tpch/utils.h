@@ -44,8 +44,14 @@ inline string fill_key(const string& key, size_t sz) {
 }
 
 inline string fill_value(const string& value, size_t sz) {
-    string result = string(sz - value.length(), '0') + value;
-    return std::move(result);
+    if (value.length() >= sz) {
+        // 如果输入字符串长度大于等于目标大小，截断到目标大小
+        return value.substr(0, sz);
+    } else {
+        // 如果输入字符串长度小于目标大小，用 '0' 填充
+        string result = string(sz - value.length(), '0') + value;
+        return std::move(result);
+    }
 }
 
 enum Lineitem {

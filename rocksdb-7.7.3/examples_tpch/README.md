@@ -13,4 +13,6 @@
 ./secondary_index_query "/home/ysm/work/test/next_db" 5 "/home/ysm/work/NEXT/tpch_query/query_q6"
 ./secondary_index_query "/home/ysm/work/test/next_db_1" 5 "/home/ysm/work/NEXT/tpch_query/query_q6"
 ./secondary_index_query "/home/ysm/work/test/next_db_10" 5 "/home/ysm/work/NEXT/tpch_query/query_q6"
+
+./secondary_index_query "/home/ysm/work/test/next_db_10_314" 5 "/home/ysm/work/NEXT/tpch_query/query_q6"
 ```

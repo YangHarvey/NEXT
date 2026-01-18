@@ -347,7 +347,10 @@ int main(int argc, char* argv[]) {
             vector<string> rows;
             splitRow(line, rows);
             std::string key, secondary_key, value;
-            serialize_item(lineCount, rows, &key, &secondary_key, &value);
+            serialize_item(lineCount, rows, &key, &secondary_key, &value, value_size);
+            if(lineCount == 5) {
+                std::cout << "value size: " << value.size() << std::endl;
+            }
 
             auto start = std::chrono::high_resolution_clock::now();
             s = db->Put(WriteOptions(), key, value);
